@@ -1,4 +1,4 @@
-from Box2D.Dynamics import b2World, b2PolygonShape, b2ChainShape
+from Box2D import b2World, b2ChainShape
 import Box2D
 import numpy
 import math
@@ -8,29 +8,30 @@ class DefaultRobot(object):
 
     min_force=-1
     max_force= 1
-    vertices = 30
+    vertex_count = 40
 
     def __init__(self, radius=0.5):
         self.radius = radius
         self.inputs = self.getDefaultInput()
         self.applypoints = ((-radius, 0), (radius, 0))
-        self.vertices = numpy.array([ (math.cos(x), math.sin(x))
-                        for x in numpy.linspace(0, math.pi*2, self.vertices)])
+        self.vertices = numpy.array([(0,0)]+[(math.sin(x), math.cos(x))
+                        for x in numpy.linspace(0, math.pi*2, self.vertex_count)])
 
     def createBody(self, world, **kargs):
-        robotBody = world.CreateDynamicBody(kargs)
-        robotBody.CreateFixture(shape = Box2D.b2CircleShape(pos=(0,0),
-                    self.radius), density = 1.0, kargs)
+        robotBody = world.CreateDynamicBody(**kargs)
+        robotBody.CreateFixture( shape = Box2D.b2CircleShape(pos=(0,0),
+                    radius = self.radius), density = 1.0, **kargs)
         return robotBody
 
     def applyForces(self, robotBody, inputs):
-        numpy.clip(inputs, self.min_force, self.max_force, self.inputs)
-        for i in range(2):
-            robotBody.applyforce(force = (0, self.inputs[i]),
-                                 point = self.applypoints[i] )
+        pass
+#         numpy.clip(inputs, self.min_force, self.max_force, self.inputs)
+#         for i in range(2):
+#             robotBody.ApplyForce(force = (0, self.inputs[i]),
+#                                  point = self.applypoints[i] )
 
     def getDefaultInput(self):
-        return numpy.zeros(2,1);
+        return numpy.zeros(2);
 
 class Robot2d(object):
 
@@ -64,25 +65,29 @@ class Robot2d(object):
         # --------------------------------------------------- #
 
         # initialize an empty world
-        self.world = b2World(gravity = (0,0), doSleep = True)
+        self.world = b2World(gravity = (0.2,1), doSleep = True)
 
         # create obstacle shapes from list of vertex list
         self.__obstacle_vertices = obstacles
         shapes = [ b2ChainShape(vertices_loop = v) for v in obstacles]
 
-        # create an unmovable entity. This will represent all obstacles
-        self.obstaclebody = self.world.CreateStaticBody()
+
         # attach all obstacle shape to the obstacle entity
-        map(lambda s: self.obstaclebody.CreateFixture(shape=s, density = 0,
-                        restitution = obstacle_restitution), shapes)
+
+#         map(lambda s: self.obstaclebody.CreateFixture(shape=s, density = 0,
+#                         restitution = obstacle_restitution), shapes)
 
         # if limits were specified, create obstacle boundary
         if world_limits != None:
             v= [world_limits[0], (world_limits[1][0], world_limits[0][1]),
                    world_limits[1],  (world_limits[0][0], world_limits[1][1])]
-            limits =b2ChainShape(vertices_loop = v)
-            self.obstaclebody.CreateFixture(shape = limits, density = 0,
-                                            restitution = obstacle_restitution)
+            shapes.append(b2ChainShape(vertices_loop = v))
+#             self.obstaclebody.CreateFixture(shape = limits, density = 0,
+#                                             restitution = obstacle_restitution)
+
+        # create an unmovable entity. This will represent all obstacles
+        self.obstaclebody = self.world.CreateStaticBody(shapes = shapes)
+
         # package the robot physical properties (for collisions)
         # The robot constructor can choose to ignore them
         param = {'position': robot_pos,
@@ -95,14 +100,16 @@ class Robot2d(object):
         self.robotbody = robot.createBody(self.world, **param)
         self.robot = robot
 
-    def step(self, inputs=None):
+    def step(self, inputs=None, timestep=None):
         self.inputs = inputs
 
         # apply various forces (e.g. robot actuator)
         self.applyforces()
 
         # simulate one step of the world
-        self.world.Step(self.timestep, self.vel_iters, self.pos_iters)
+        if timestep == None:
+            timestep = self.timestep
+        self.world.Step(timestep, self.vel_iters, self.pos_iters)
 
         # clear forces
         self.world.ClearForces()
