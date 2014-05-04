@@ -1,6 +1,8 @@
 import pyglet
 from pyglet import window
+from pyglet.window import key
 from robot2d import Robot2d
+import math
 
 class RobotWindow(window.Window):
     default_visible= 6
@@ -70,7 +72,7 @@ class RobotWindow(window.Window):
             pyglet.gl.glPushMatrix()
 
             pyglet.gl.glTranslatef(pos[0], pos[1], 0)
-            pyglet.gl.glRotatef(angle, 0, 0, 1)
+            pyglet.gl.glRotatef(math.degrees(angle), 0, 0, 1)
             if self.robotautodraw:
                 self.robot2d.robot.draw()
             elif self.robotrender != None:
@@ -133,6 +135,28 @@ class RobotWindow(window.Window):
 
         return mcoord
 
+    def on_key_press(self, symbol, modifiers):
+        if self.robot2d != None:
+            if symbol == key.LEFT:
+                self.robot2d.inputs += (-0.7,0.7)
+            if symbol == key.RIGHT:
+                self.robot2d.inputs += (0.7,-0.7)
+            if symbol == key.UP:
+                self.robot2d.inputs += (0.7,0.7)
+            if symbol == key.DOWN:
+                self.robot2d.inputs -= (0.7,0.7)
+        super(RobotWindow, self).on_key_press(symbol, modifiers)
+
+    def on_key_release(self, symbol, modifiers):
+        if self.robot2d != None:
+            if symbol == key.LEFT:
+                self.robot2d.inputs -= (-0.7,0.7)
+            if symbol == key.RIGHT:
+                self.robot2d.inputs -= (0.7,-0.7)
+            if symbol == key.UP:
+                self.robot2d.inputs -= (0.7,0.7)
+            if symbol == key.DOWN:
+                self.robot2d.inputs += (0.7,0.7)
 
 
 if __name__ == '__main__':
@@ -140,8 +164,7 @@ if __name__ == '__main__':
 
     configTemp = pyglet.gl.Config(sample_buffers=1,
         samples=4,
-        double_buffer=True,
-        alpha_size=0)
+        double_buffer=True)
 
     platform = pyglet.window.get_platform()
     display = platform.get_default_display()
@@ -160,6 +183,6 @@ if __name__ == '__main__':
     pyglet.gl.glEnable(pyglet.gl.GL_LINE_SMOOTH )
     pyglet.gl.glEnable(pyglet.gl.GL_POLYGON_SMOOTH )
     pyglet.gl.glEnable(pyglet.gl.GL_POINT_SMOOTH )
-    pyglet.gl.glLineWidth(3)
+    pyglet.gl.glLineWidth(2)
     pyglet.gl.glClearColor(0, 0, 0, 1.0)
     pyglet.app.run()
