@@ -1,7 +1,29 @@
-from Box2D import b2World, b2ChainShape, b2Dot, b2ContactListener
+from Box2D import b2World, b2ChainShape, b2Dot, b2Vec2
+from Box2D import b2ContactListener, b2RayCastCallback
 import Box2D
 import numpy
+import pdb
 import math
+
+class LaserRangeFinder(b2RayCastCallback):
+    def __init__(self):
+        b2RayCastCallback.__init__(self)
+        self.point = None
+
+    def ReportFixture(self, fixture, point, normal, fraction):
+        self.point = point
+        return fraction
+
+    def getRange(self, world, point_from, point_to):
+        self.point = None
+        world.RayCast(self, point_from, point_to)
+
+        if self.point == None:
+            return -1
+
+        return math.sqrt( (self.point[0] - point_from[0])**2 +
+                          (self.point[1] - point_from[1])**2)
+
 
 # basic circular robot with differential drive
 class DefaultRobot(b2ContactListener):
@@ -13,7 +35,9 @@ class DefaultRobot(b2ContactListener):
     bumper_h = 0.05
     bumper_w = 0.1
 
-    def __init__(self, radius=0.5, nbumpers = 6, nlasers= 0):
+    laser_max_range = 10
+
+    def __init__(self, radius=0.5, nbumpers = 6, nlasers= 16):
         b2ContactListener.__init__(self)
 
         self.radius = radius
@@ -23,10 +47,11 @@ class DefaultRobot(b2ContactListener):
                         for x in numpy.linspace(0, math.pi*2, self.vertex_count)])
         self.nlasers = nlasers
         self.nbumpers = nbumpers
+        self.laserrange = LaserRangeFinder()
 
         self.output = numpy.zeros(nlasers + nbumpers)
 
-    def createBody(self, world, **kargs):
+    def attachRobotBody(self, world, **kargs):
         robotBody = world.CreateDynamicBody(**kargs)
         robotBody.CreateFixture( shape = Box2D.b2CircleShape(pos=(0, 0),
                     radius = self.radius), density = 1.0, **kargs)
@@ -42,10 +67,11 @@ class DefaultRobot(b2ContactListener):
                                     density = 0.01,
                                     isSensor = True,
                                     userData = 'b'+ str(i))
-
+        self.robotBody = robotBody
         return robotBody
 
-    def applyForces(self, robotBody, inputs):
+    def applyForces(self, inputs):
+        robotBody = self.robotBody
         numpy.clip(inputs, self.min_force, self.max_force, self.inputs)
         normal = robotBody.GetWorldVector((1,0))
         lateralimp = -robotBody.mass* b2Dot(normal, robotBody.linearVelocity) * normal
@@ -59,6 +85,21 @@ class DefaultRobot(b2ContactListener):
 
     def getDefaultInput(self):
         return numpy.zeros(2);
+
+    def updateOutput(self, world):
+        for i, angle in enumerate(numpy.linspace(0, math.pi*2, self.nlasers+1)[:-1]):
+            pfrom, pto = self.getToFromLaser(angle)
+            self.output[i+self.nbumpers] = self.laserrange.getRange(world,
+                                                 self.robotBody.GetWorldPoint(pfrom),
+                                                 self.robotBody.GetWorldPoint(pto))
+            if self.output[i + self.nbumpers]< 0:
+                self.output[i + self.nbumpers] = self.laser_max_range
+
+    def getToFromLaser(self, angle):
+        pfrom = numpy.array((self.radius * math.sin(angle),
+                             self.radius * math.cos(angle)))
+        pto = pfrom*(self.laser_max_range/numpy.linalg.norm(pfrom) + 1)
+        return pfrom, pto
 
     def BeginContact(self, contact):
         uA = contact.fixtureA.userData
@@ -97,8 +138,8 @@ class Robot2d(object):
         robot_pos = kargs.get('robot_pos', (0,0))
         robot_angle = kargs.get('robot_angle', 0)
         robot = kargs.get('robot', DefaultRobot())
-        robot_linear_damping = kargs.get('robot_linear_damping', 0.7)
-        robot_angluar_damping = kargs.get('robot_angluar_damping', 0.9)
+        robot_linear_damping = kargs.get('robot_linear_damping', 0.9)
+        robot_angluar_damping = kargs.get('robot_angluar_damping', 0.99)
         robot_restitution = kargs.get('robot_restitution', 0.1)
 
         # world limit should be a list with two tuple. The coordinates
@@ -150,7 +191,7 @@ class Robot2d(object):
                     'restitution': robot_restitution}
 
         # create the robot entity
-        self.robotbody = robot.createBody(self.world, **param)
+        self.robotbody = robot.attachRobotBody(self.world, **param)
         self.robot = robot
         self.inputs = robot.getDefaultInput()
 
@@ -171,7 +212,7 @@ class Robot2d(object):
         self.world.ClearForces()
 
     def applyforces(self):
-        self.robot.applyForces(self.robotbody, self.inputs)
+        self.robot.applyForces(self.inputs)
 
 #     @property
 #     def inputs(self):
@@ -180,6 +221,11 @@ class Robot2d(object):
 #     @inputs.setter
 #     def inputs(self, value):
 #         self.robot.inputs[:] = value
+
+    @property
+    def output(self):
+        self.robot.updateOutput(self.world)
+        return self.robot.output
 
     @property
     def velocity(self):
@@ -216,6 +262,5 @@ class Robot2d(object):
     @property
     def obstacle_vertices(self):
         return self.__obstacle_vertices
-
 
 

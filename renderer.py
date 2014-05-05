@@ -1,8 +1,39 @@
 import pyglet
 from pyglet import window
 from pyglet.window import key
-from robot2d import Robot2d
+from robot2d import Robot2d, DefaultRobot
 import math
+import numpy
+
+
+class DefaultRobotWithDraw(DefaultRobot):
+    robot_color = (200, 50, 50)
+
+    def __init__(self):
+        DefaultRobot.__init__(self)
+        self.robotrender = pyglet.graphics.Batch()
+        vertices = self.vertices
+        indices = [[0]] + [[x, x] for x in range(1, len(vertices)) ] + [[0]]
+        indices = [x for l in indices for x in l]
+        vertices = [ x for p in vertices for x in p]
+
+        self.robotrender.add_indexed(len(vertices)/2, pyglet.gl.GL_LINES,
+                                     None, indices,
+                                     ('v2f', vertices),
+                                     ('c3B', self.robot_color*(len(vertices)/2)))
+
+    def draw(self):
+        self.robotrender.draw()
+        vertices = [ self.getToFromLaser(a)[0] for a in
+                            numpy.linspace(0, math.pi*2, self.nlasers+1)[:-1]]
+        vertices = [ (pfrom, pfrom * (self.output[self.nbumpers + i]/ numpy.linalg.norm(pfrom) + 1))
+                      for i, pfrom in enumerate(vertices)]
+        vertices = [ x for l in vertices for p in l for x in p]
+
+        pyglet.graphics.draw(len(vertices)/2, pyglet.gl.GL_LINES,
+                             ('v2f', vertices),
+                             ('c4B', (230, 20, 20, 100)*(len(vertices)/2)))
+
 
 class RobotWindow(window.Window):
     default_visible= 6
@@ -19,6 +50,7 @@ class RobotWindow(window.Window):
 
     def update(self, dt):
         self.robot2d.step(timestep = dt)
+        o = self.robot2d.output
 
     def on_draw(self):
         self.clear()
@@ -160,7 +192,8 @@ class RobotWindow(window.Window):
 
 
 if __name__ == '__main__':
-    robot = Robot2d([[ (1,1), (2,5), (2,3)], [ (10,10), (20,50), (20,30)]])
+    robot = Robot2d([[ (1,1), (2,5), (2,3)], [ (10,10), (20,50), (20,30)]],
+                    robot = DefaultRobotWithDraw())
 
     configTemp = pyglet.gl.Config(sample_buffers=1,
         samples=4,
@@ -184,5 +217,6 @@ if __name__ == '__main__':
     pyglet.gl.glEnable(pyglet.gl.GL_POLYGON_SMOOTH )
     pyglet.gl.glEnable(pyglet.gl.GL_POINT_SMOOTH )
     pyglet.gl.glLineWidth(2)
+    pyglet.gl.glPointSize(5)
     pyglet.gl.glClearColor(0, 0, 0, 1.0)
     pyglet.app.run()
